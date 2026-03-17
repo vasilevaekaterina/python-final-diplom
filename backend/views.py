@@ -69,3 +69,32 @@ class RegisterAccount(APIView):
                 'Token': confirm_token.key,
             },
         )
+
+
+class ConfirmAccount(APIView):
+    def post(self, request, *args, **kwargs):
+        if not {'email', 'token'}.issubset(request.data):
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+
+        token = ConfirmEmailToken.objects.filter(
+            user__email=request.data['email'],
+            key=request.data['token'],
+        ).first()
+
+        if not token:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Неправильно указан токен или email',
+                },
+            )
+
+        token.user.is_active = True
+        token.user.save()
+        token.delete()
+        return JsonResponse({'Status': True})
