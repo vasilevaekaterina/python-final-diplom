@@ -172,3 +172,23 @@ class AccountDetails(APIView):
                 'Errors': serializer.errors,
             },
         )
+
+
+class ApiRoot(APIView):
+    def get(self, request, *args, **kwargs):
+        return JsonResponse(
+            {
+                'Status': True,
+                'Message': 'API is running',
+                'Endpoints': {
+                    'register': '/api/v1/user/register',
+                    'confirm': '/api/v1/user/confirm',
+                    'login': '/api/v1/user/login',
+                    'details': '/api/v1/user/details',
+                    'password_reset': '/api/v1/user/password_reset',
+                    'password_reset_confirm': (
+                        '/api/v1/user/password_reset/confirm'
+                    ),
+                },
+            },
+        )

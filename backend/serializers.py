@@ -1,6 +1,9 @@
 from rest_framework import serializers
 
-from backend.models import Contact, User
+from backend.models import (
+    Contact,
+    User,
+)
 
 
 class ContactSerializer(serializers.ModelSerializer):
