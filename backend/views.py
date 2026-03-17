@@ -2,14 +2,20 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
+from django.db.models import Q
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.models import Category, ConfirmEmailToken, Shop, User
-from backend.serializers import CategorySerializer, ShopSerializer, UserSerializer
+from backend.models import Category, ConfirmEmailToken, ProductInfo, Shop, User
+from backend.serializers import (
+    CategorySerializer,
+    ProductInfoSerializer,
+    ShopSerializer,
+    UserSerializer,
+)
 
 
 class RegisterAccount(APIView):
@@ -191,6 +197,7 @@ class ApiRoot(APIView):
                     ),
                     'categories': '/api/v1/categories',
                     'shops': '/api/v1/shops',
+                    'products': '/api/v1/products',
                 },
             },
         )
@@ -207,4 +214,33 @@ class ShopView(APIView):
     def get(self, request, *args, **kwargs):
         queryset = Shop.objects.filter(state=True).order_by('-name')
         serializer = ShopSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class ProductInfoView(APIView):
+    def get(self, request, *args, **kwargs):
+        query = Q(shop__state=True)
+
+        shop_id = request.query_params.get('shop_id')
+        if shop_id:
+            query &= Q(shop_id=shop_id)
+
+        category_id = request.query_params.get('category_id')
+        if category_id:
+            query &= Q(product__category_id=category_id)
+
+        search = request.query_params.get('search')
+        if search:
+            query &= (
+                Q(product__name__icontains=search)
+                | Q(model__icontains=search)
+            )
+
+        queryset = (
+            ProductInfo.objects.filter(query)
+            .select_related('shop', 'product__category')
+            .prefetch_related('product_parameters__parameter')
+            .distinct()
+        )
+        serializer = ProductInfoSerializer(queryset, many=True)
         return Response(serializer.data)

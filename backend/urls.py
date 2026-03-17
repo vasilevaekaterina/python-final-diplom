@@ -10,6 +10,7 @@ from backend.views import (
     CategoryView,
     ConfirmAccount,
     LoginAccount,
+    ProductInfoView,
     RegisterAccount,
     ShopView,
 )
@@ -20,6 +21,7 @@ urlpatterns = [
     path('', ApiRoot.as_view(), name='api-root'),
     path('categories', CategoryView.as_view(), name='categories'),
     path('shops', ShopView.as_view(), name='shops'),
+    path('products', ProductInfoView.as_view(), name='products'),
     path('user/register', RegisterAccount.as_view(), name='user-register'),
     path('user/confirm', ConfirmAccount.as_view(), name='user-confirm'),
     path('user/login', LoginAccount.as_view(), name='user-login'),
