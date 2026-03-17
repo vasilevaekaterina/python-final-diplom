@@ -1,6 +1,8 @@
+from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
+from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
 
 from backend.models import ConfirmEmailToken, User
@@ -98,3 +100,31 @@ class ConfirmAccount(APIView):
         token.user.save()
         token.delete()
         return JsonResponse({'Status': True})
+
+
+class LoginAccount(APIView):
+    def post(self, request, *args, **kwargs):
+        if not {'email', 'password'}.issubset(request.data):
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+
+        user = authenticate(
+            request,
+            username=request.data['email'],
+            password=request.data['password'],
+        )
+
+        if user is None or not user.is_active:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не удалось авторизовать',
+                },
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+        return JsonResponse({'Status': True, 'Token': token.key})
