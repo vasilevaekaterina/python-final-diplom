@@ -7,6 +7,7 @@ from django_rest_passwordreset.views import (
 from backend.views import (
     AccountDetails,
     ApiRoot,
+    CategoryView,
     ConfirmAccount,
     LoginAccount,
     RegisterAccount,
@@ -16,6 +17,7 @@ app_name = 'backend'
 
 urlpatterns = [
     path('', ApiRoot.as_view(), name='api-root'),
+    path('categories', CategoryView.as_view(), name='categories'),
     path('user/register', RegisterAccount.as_view(), name='user-register'),
     path('user/confirm', ConfirmAccount.as_view(), name='user-confirm'),
     path('user/login', LoginAccount.as_view(), name='user-login'),
