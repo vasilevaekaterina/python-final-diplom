@@ -8,8 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.models import Category, ConfirmEmailToken, User
-from backend.serializers import CategorySerializer, UserSerializer
+from backend.models import Category, ConfirmEmailToken, Shop, User
+from backend.serializers import CategorySerializer, ShopSerializer, UserSerializer
 
 
 class RegisterAccount(APIView):
@@ -190,6 +190,7 @@ class ApiRoot(APIView):
                         '/api/v1/user/password_reset/confirm'
                     ),
                     'categories': '/api/v1/categories',
+                    'shops': '/api/v1/shops',
                 },
             },
         )
@@ -199,4 +200,11 @@ class CategoryView(APIView):
     def get(self, request, *args, **kwargs):
         queryset = Category.objects.all().order_by('-name')
         serializer = CategorySerializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class ShopView(APIView):
+    def get(self, request, *args, **kwargs):
+        queryset = Shop.objects.filter(state=True).order_by('-name')
+        serializer = ShopSerializer(queryset, many=True)
         return Response(serializer.data)
