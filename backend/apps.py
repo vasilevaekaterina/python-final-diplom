@@ -6,4 +6,4 @@ class BackendConfig(AppConfig):
     name = 'backend'
 
     def ready(self):
-        import backend.signals
+        import backend.signals  # noqa: F401
