@@ -18,6 +18,29 @@ from backend.serializers import (
 )
 
 
+class PartnerPermissionMixin:
+    """
+    Доступ к эндпоинтам /api/v1/partner/* только у пользователей с type='shop'.
+    """
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse(
+                {'Status': False, 'Error': 'Log in required'},
+                status=403,
+            )
+        if getattr(request.user, 'type', None) != 'shop':
+            return JsonResponse(
+                {'Status': False, 'Error': 'Только для магазинов'},
+                status=403,
+            )
+        return super().dispatch(request, *args, **kwargs)
+
+
+class PartnerBaseView(PartnerPermissionMixin, APIView):
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
+
 class RegisterAccount(APIView):
     def post(self, request, *args, **kwargs):
         required_fields = {
@@ -198,6 +221,9 @@ class ApiRoot(APIView):
                     'categories': '/api/v1/categories',
                     'shops': '/api/v1/shops',
                     'products': '/api/v1/products',
+                    'partner_update': '/api/v1/partner/update',
+                    'partner_state': '/api/v1/partner/state',
+                    'partner_orders': '/api/v1/partner/orders',
                 },
             },
         )
@@ -244,3 +270,35 @@ class ProductInfoView(APIView):
         )
         serializer = ProductInfoSerializer(queryset, many=True)
         return Response(serializer.data)
+
+
+class PartnerUpdate(PartnerBaseView):
+    """POST: загрузка прайса по URL (YAML)."""
+
+    def post(self, request, *args, **kwargs):
+        return JsonResponse(
+            {'Status': True, 'Message': 'Partner update (stub)'},
+        )
+
+
+class PartnerState(PartnerBaseView):
+    """GET: статус приёма заказов; POST: изменить статус."""
+
+    def get(self, request, *args, **kwargs):
+        return JsonResponse(
+            {'Status': True, 'Message': 'Partner state (stub)'},
+        )
+
+    def post(self, request, *args, **kwargs):
+        return JsonResponse(
+            {'Status': True, 'Message': 'Partner state update (stub)'},
+        )
+
+
+class PartnerOrders(PartnerBaseView):
+    """GET: заказы поставщика."""
+
+    def get(self, request, *args, **kwargs):
+        return JsonResponse(
+            {'Status': True, 'Orders': []},
+        )
