@@ -3,7 +3,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.http import JsonResponse
-from django.db.models import Q
+from django.db.models import F, Q, Sum
 from requests import get
 from rest_framework.authtoken.models import Token
 from yaml import load as load_yaml, Loader
@@ -15,6 +15,7 @@ from rest_framework.views import APIView
 from backend.models import (
     Category,
     ConfirmEmailToken,
+    Order,
     Parameter,
     Product,
     ProductInfo,
@@ -24,6 +25,7 @@ from backend.models import (
 )
 from backend.serializers import (
     CategorySerializer,
+    OrderSerializer,
     ProductInfoSerializer,
     ShopSerializer,
     UserSerializer,
@@ -441,6 +443,23 @@ class PartnerOrders(PartnerBaseView):
     """GET: заказы поставщика."""
 
     def get(self, request, *args, **kwargs):
-        return JsonResponse(
-            {'Status': True, 'Orders': []},
+        orders = (
+            Order.objects.filter(
+                ordered_items__product_info__shop__user=request.user,
+            )
+            .exclude(state='basket')
+            .prefetch_related(
+                'ordered_items__product_info__product__category',
+                'ordered_items__product_info__product_parameters__parameter',
+            )
+            .select_related('contact')
+            .annotate(
+                total_sum=Sum(
+                    F('ordered_items__quantity')
+                    * F('ordered_items__product_info__price'),
+                ),
+            )
+            .distinct()
         )
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data)
