@@ -811,4 +811,18 @@ class OrderView(BuyerBaseView):
                 status=404,
             )
 
+        try:
+            order = Order.objects.get(id=order_id)
+            send_email(
+                subject='Заказ оформлен',
+                message=(
+                    f'Ваш заказ №{order.id} принят в обработку.\n'
+                    f'Контакт доставки: {contact.city}, {contact.street}, '
+                    f'{contact.phone}'
+                ),
+                to_email=request.user.email,
+            )
+        except Exception:
+            pass
+
         return JsonResponse({'Status': True})
