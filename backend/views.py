@@ -378,14 +378,63 @@ class PartnerState(PartnerBaseView):
     """GET: статус приёма заказов; POST: изменить статус."""
 
     def get(self, request, *args, **kwargs):
-        return JsonResponse(
-            {'Status': True, 'Message': 'Partner state (stub)'},
-        )
+        shop = Shop.objects.filter(user=request.user).first()
+        if not shop:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Error': 'Магазин не найден. Сначала загрузите прайс.',
+                },
+                status=400,
+            )
+        serializer = ShopSerializer(shop)
+        return Response(serializer.data)
 
     def post(self, request, *args, **kwargs):
-        return JsonResponse(
-            {'Status': True, 'Message': 'Partner state update (stub)'},
-        )
+        shop = Shop.objects.filter(user=request.user).first()
+        if not shop:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Error': 'Магазин не найден. Сначала загрузите прайс.',
+                },
+                status=400,
+            )
+
+        if 'state' not in request.data:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+
+        raw_state = request.data.get('state')
+        if isinstance(raw_state, bool):
+            new_state = raw_state
+        elif raw_state is None:
+            return JsonResponse(
+                {'Status': False, 'Errors': {'state': 'Некорректное значение'}},
+            )
+        else:
+            value = str(raw_state).strip().lower()
+            true_values = {'1', 'true', 't', 'yes', 'y', 'on'}
+            false_values = {'0', 'false', 'f', 'no', 'n', 'off'}
+            if value in true_values:
+                new_state = True
+            elif value in false_values:
+                new_state = False
+            else:
+                return JsonResponse(
+                    {
+                        'Status': False,
+                        'Errors': {'state': 'Ожидается true/false'},
+                    },
+                )
+
+        shop.state = new_state
+        shop.save(update_fields=['state'])
+        return JsonResponse({'Status': True})
 
 
 class PartnerOrders(PartnerBaseView):
