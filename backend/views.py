@@ -725,7 +725,73 @@ class ContactView(BuyerBaseView):
 
 class OrderView(BuyerBaseView):
     def get(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Orders (stub)'})
+        orders = (
+            Order.objects.filter(user=request.user)
+            .exclude(state='basket')
+            .prefetch_related(
+                'ordered_items__product_info__product__category',
+                'ordered_items__product_info__product_parameters__parameter',
+            )
+            .select_related('contact')
+            .annotate(
+                total_sum=Sum(
+                    F('ordered_items__quantity')
+                    * F('ordered_items__product_info__price'),
+                ),
+            )
+            .distinct()
+        )
+        serializer = OrderSerializer(orders, many=True)
+        return Response(serializer.data)
 
     def post(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Order create (stub)'})
+        if not {'id', 'contact'}.issubset(request.data):
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+
+        order_id = request.data.get('id')
+        contact_id = request.data.get('contact')
+        if not str(order_id).isdigit() or not str(contact_id).isdigit():
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Неправильно указаны аргументы',
+                },
+            )
+
+        contact = Contact.objects.filter(
+            id=contact_id,
+            user=request.user,
+        ).first()
+        if not contact:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Контакт не найден',
+                },
+                status=404,
+            )
+
+        is_updated = Order.objects.filter(
+            user=request.user,
+            id=order_id,
+            state='basket',
+        ).update(
+            contact=contact,
+            state='new',
+        )
+
+        if not is_updated:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Корзина не найдена',
+                },
+                status=404,
+            )
+
+        return JsonResponse({'Status': True})
