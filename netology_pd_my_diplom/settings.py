@@ -131,6 +131,7 @@ USE_TZ = True
 
 # Email backend for development (prints emails to console)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'noreply@example.com'
 
 
 # Static files (CSS, JavaScript, Images)

@@ -36,6 +36,7 @@ from backend.serializers import (
     ShopSerializer,
     UserSerializer,
 )
+from backend.signals import send_email
 
 
 class PartnerPermissionMixin:
@@ -143,10 +144,26 @@ class RegisterAccount(APIView):
             )
 
         confirm_token = ConfirmEmailToken.objects.create(user=user)
+
+        email_sent = True
+        try:
+            send_email(
+                subject='Подтверждение регистрации',
+                message=(
+                    'Ваш токен подтверждения: '
+                    f'{confirm_token.key}\n\n'
+                    'Отправьте его на /api/v1/user/confirm вместе с email.'
+                ),
+                to_email=user.email,
+            )
+        except Exception:
+            email_sent = False
+
         return JsonResponse(
             {
                 'Status': True,
                 'Token': confirm_token.key,
+                'EmailSent': email_sent,
             },
         )
 

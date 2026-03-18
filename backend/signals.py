@@ -6,7 +6,7 @@ def send_email(subject: str, message: str, to_email: str) -> int:
     return send_mail(
         subject=subject,
         message=message,
-        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', None),
+        from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[to_email],
         fail_silently=False,
     )
