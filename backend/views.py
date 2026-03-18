@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 
 from backend.models import (
     Category,
+    Contact,
     ConfirmEmailToken,
     Order,
     Parameter,
@@ -25,6 +26,7 @@ from backend.models import (
 )
 from backend.serializers import (
     CategorySerializer,
+    ContactSerializer,
     OrderSerializer,
     ProductInfoSerializer,
     ShopSerializer,
@@ -57,7 +59,8 @@ class PartnerBaseView(PartnerPermissionMixin, APIView):
 
 class BuyerPermissionMixin:
     """
-    Доступ к эндпоинтам покупателя (корзина/контакты/заказы) только для type='buyer'.
+    Доступ к эндпоинтам покупателя (корзина/контакты/заказы) только для
+    type='buyer'.
     """
 
     def dispatch(self, request, *args, **kwargs):
@@ -443,7 +446,10 @@ class PartnerState(PartnerBaseView):
             new_state = raw_state
         elif raw_state is None:
             return JsonResponse(
-                {'Status': False, 'Errors': {'state': 'Некорректное значение'}},
+                {
+                    'Status': False,
+                    'Errors': {'state': 'Некорректное значение'},
+                },
             )
         else:
             value = str(raw_state).strip().lower()
@@ -500,24 +506,100 @@ class BasketView(BuyerBaseView):
         return JsonResponse({'Status': True, 'Message': 'Basket add (stub)'})
 
     def put(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Basket update (stub)'})
+        return JsonResponse(
+            {'Status': True, 'Message': 'Basket update (stub)'},
+        )
 
     def delete(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Basket delete (stub)'})
+        return JsonResponse(
+            {'Status': True, 'Message': 'Basket delete (stub)'},
+        )
 
 
 class ContactView(BuyerBaseView):
+    """GET: список контактов; POST: создать; PUT: обновить; DELETE: удалить."""
+
     def get(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Contacts (stub)'})
+        contacts = Contact.objects.filter(user=request.user)
+        serializer = ContactSerializer(contacts, many=True)
+        return Response(serializer.data)
 
     def post(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Contact create (stub)'})
+        if not {'city', 'street', 'phone'}.issubset(request.data):
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+        data = dict(request.data)
+        data['user'] = request.user.id
+        serializer = ContactSerializer(data=data)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse({'Status': True})
+        return JsonResponse(
+            {'Status': False, 'Errors': serializer.errors},
+        )
 
     def put(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Contact update (stub)'})
+        if 'id' not in request.data:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+        contact_id = request.data.get('id')
+        if not str(contact_id).isdigit():
+            return JsonResponse(
+                {'Status': False, 'Errors': {'id': 'Некорректный id'}},
+            )
+        contact = Contact.objects.filter(
+            id=contact_id,
+            user=request.user,
+        ).first()
+        if not contact:
+            return JsonResponse(
+                {'Status': False, 'Errors': 'Контакт не найден'},
+                status=404,
+            )
+        serializer = ContactSerializer(
+            contact,
+            data=request.data,
+            partial=True,
+        )
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse({'Status': True})
+        return JsonResponse(
+            {'Status': False, 'Errors': serializer.errors},
+        )
 
     def delete(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Contact delete (stub)'})
+        items_raw = request.data.get('items')
+        if not items_raw:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+        ids = [
+            x.strip() for x in str(items_raw).split(',')
+            if str(x).strip().isdigit()
+        ]
+        if not ids:
+            return JsonResponse(
+                {'Status': False, 'Errors': 'Некорректный список id'},
+            )
+        deleted_count, _ = Contact.objects.filter(
+            user=request.user,
+            id__in=ids,
+        ).delete()
+        return JsonResponse(
+            {'Status': True, 'Удалено объектов': deleted_count},
+        )
 
 
 class OrderView(BuyerBaseView):
