@@ -1,15 +1,27 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.http import JsonResponse
 from django.db.models import Q
+from requests import get
 from rest_framework.authtoken.models import Token
+from yaml import load as load_yaml, Loader
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from backend.models import Category, ConfirmEmailToken, ProductInfo, Shop, User
+from backend.models import (
+    Category,
+    ConfirmEmailToken,
+    Parameter,
+    Product,
+    ProductInfo,
+    ProductParameter,
+    Shop,
+    User,
+)
 from backend.serializers import (
     CategorySerializer,
     ProductInfoSerializer,
@@ -276,9 +288,90 @@ class PartnerUpdate(PartnerBaseView):
     """POST: загрузка прайса по URL (YAML)."""
 
     def post(self, request, *args, **kwargs):
-        return JsonResponse(
-            {'Status': True, 'Message': 'Partner update (stub)'},
+        url = request.data.get('url')
+        if not url:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+
+        validator = URLValidator()
+        try:
+            validator(url)
+        except ValidationError as exc:
+            return JsonResponse(
+                {'Status': False, 'Error': str(exc)},
+            )
+
+        try:
+            response = get(url)
+            response.raise_for_status()
+            stream = response.content
+        except Exception as exc:
+            return JsonResponse(
+                {'Status': False, 'Error': str(exc)},
+            )
+
+        try:
+            data = load_yaml(stream, Loader=Loader)
+        except Exception as exc:
+            return JsonResponse(
+                {'Status': False, 'Error': f'Ошибка разбора YAML: {exc}'},
+            )
+
+        if not data or 'shop' not in data or 'categories' not in data:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Error': 'Неверная структура YAML: shop, categories',
+                },
+            )
+
+        shop, _ = Shop.objects.get_or_create(
+            user=request.user,
+            defaults={'name': data['shop']},
         )
+        shop.name = data['shop']
+        shop.save(update_fields=['name'])
+
+        for cat in data.get('categories', []):
+            category, _ = Category.objects.get_or_create(
+                id=cat['id'],
+                defaults={'name': cat['name']},
+            )
+            category.name = cat['name']
+            category.save(update_fields=['name'])
+            category.shops.add(shop)
+
+        ProductInfo.objects.filter(shop=shop).delete()
+
+        for item in data.get('goods', []):
+            product, _ = Product.objects.get_or_create(
+                name=item['name'],
+                category_id=item['category'],
+            )
+            product_info = ProductInfo.objects.create(
+                product=product,
+                shop=shop,
+                external_id=item['id'],
+                model=item.get('model', ''),
+                price=item['price'],
+                price_rrc=item['price_rrc'],
+                quantity=item['quantity'],
+            )
+            for param_name, param_value in item.get('parameters', {}).items():
+                param_obj, _ = Parameter.objects.get_or_create(
+                    name=param_name,
+                )
+                ProductParameter.objects.create(
+                    product_info=product_info,
+                    parameter=param_obj,
+                    value=str(param_value),
+                )
+
+        return JsonResponse({'Status': True})
 
 
 class PartnerState(PartnerBaseView):
