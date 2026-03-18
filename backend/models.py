@@ -24,6 +24,8 @@ USER_TYPE_CHOICES = (
 
 
 class UserManager(BaseUserManager):
+    """Менеджер пользователей: вход по email, создание обычного и суперпользователя."""
+
     use_in_migrations = True
 
     def _create_user(self, email, password, **extra_fields):
@@ -54,6 +56,11 @@ class UserManager(BaseUserManager):
 
 
 class User(AbstractUser):
+    """
+    Пользователь системы: покупатель (buyer) или магазин-партнёр (shop).
+    Логин — по email; до подтверждения почты is_active=False.
+    """
+
     REQUIRED_FIELDS = []
     objects = UserManager()
     USERNAME_FIELD = 'email'
@@ -106,6 +113,11 @@ class User(AbstractUser):
 
 
 class Shop(models.Model):
+    """
+    Магазин-поставщик: один на пользователя type=shop.
+    state — принимает ли заказы; прайс и товары привязаны к этому магазину.
+    """
+
     objects = models.manager.Manager()
     name = models.CharField(max_length=50, verbose_name='Название')
     url = models.URLField(verbose_name='Ссылка', null=True, blank=True)
@@ -131,6 +143,8 @@ class Shop(models.Model):
 
 
 class Category(models.Model):
+    """Категория товаров; может быть связана с несколькими магазинами (M2M)."""
+
     objects = models.manager.Manager()
     name = models.CharField(max_length=40, verbose_name='Название')
     shops = models.ManyToManyField(
@@ -150,6 +164,8 @@ class Category(models.Model):
 
 
 class Product(models.Model):
+    """Номенклатура товара (название + категория); в прайсах разных магазинов — ProductInfo."""
+
     objects = models.manager.Manager()
     name = models.CharField(max_length=80, verbose_name='Название')
     category = models.ForeignKey(
@@ -170,6 +186,11 @@ class Product(models.Model):
 
 
 class ProductInfo(models.Model):
+    """
+    Позиция в прайсе конкретного магазина: цена, остаток, внешний id из YAML.
+    Уникальность: (product, shop, external_id).
+    """
+
     objects = models.manager.Manager()
     model = models.CharField(max_length=80, verbose_name='Модель', blank=True)
     external_id = models.PositiveIntegerField(verbose_name='Внешний ИД')
@@ -205,6 +226,8 @@ class ProductInfo(models.Model):
 
 
 class Parameter(models.Model):
+    """Справочник имён характеристик (диагональ, память и т.д.)."""
+
     objects = models.manager.Manager()
     name = models.CharField(max_length=40, verbose_name='Название')
 
@@ -218,6 +241,8 @@ class Parameter(models.Model):
 
 
 class ProductParameter(models.Model):
+    """Значение одной характеристики для строки ProductInfo (из YAML parameters)."""
+
     objects = models.manager.Manager()
     product_info = models.ForeignKey(
         ProductInfo,
@@ -247,6 +272,8 @@ class ProductParameter(models.Model):
 
 
 class Contact(models.Model):
+    """Адрес и телефон доставки покупателя; выбирается при оформлении заказа."""
+
     objects = models.manager.Manager()
     user = models.ForeignKey(
         User,
@@ -284,6 +311,11 @@ class Contact(models.Model):
 
 
 class Order(models.Model):
+    """
+    Заказ или корзина: state=basket — корзина покупателя; после оформления — new и далее.
+    Связь с контактом доставки заполняется при подтверждении заказа.
+    """
+
     objects = models.manager.Manager()
     user = models.ForeignKey(
         User,
@@ -316,6 +348,8 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
+    """Строка заказа/корзины: ссылка на ProductInfo и количество штук."""
+
     objects = models.manager.Manager()
     order = models.ForeignKey(
         Order,
@@ -345,6 +379,11 @@ class OrderItem(models.Model):
 
 
 class ConfirmEmailToken(models.Model):
+    """
+    Одноразовый ключ для подтверждения email после регистрации.
+    После успешного confirm запись удаляется, пользователь активируется.
+    """
+
     objects = models.manager.Manager()
 
     class Meta:

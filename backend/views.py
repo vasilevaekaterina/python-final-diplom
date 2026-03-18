@@ -10,6 +10,7 @@ from rest_framework.authtoken.models import Token
 from ujson import loads as load_json
 from yaml import load as load_yaml, Loader
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -42,22 +43,17 @@ from backend.signals import send_email
 class PartnerPermissionMixin:
     """
     Доступ к эндпоинтам /api/v1/partner/* только у пользователей с type='shop'.
+    Проверка после аутентификации (в initial), иначе request.user ещё анонимен.
     """
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return JsonResponse(
-                {'Status': False, 'Error': 'Log in required'},
-                status=403,
-            )
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
         if getattr(request.user, 'type', None) != 'shop':
-            return JsonResponse(
-                {'Status': False, 'Error': 'Только для магазинов'},
-                status=403,
-            )
-        return super().dispatch(request, *args, **kwargs)
+            raise PermissionDenied('Только для магазинов')
 
 
 class PartnerBaseView(PartnerPermissionMixin, APIView):
+    """Базовый класс для эндпоинтов партнёра: токен + только type=shop."""
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAuthenticated,)
 
@@ -65,29 +61,24 @@ class PartnerBaseView(PartnerPermissionMixin, APIView):
 class BuyerPermissionMixin:
     """
     Доступ к эндпоинтам покупателя (корзина/контакты/заказы) только для
-    type='buyer'.
+    type='buyer'. Проверка после аутентификации (в initial).
     """
 
-    def dispatch(self, request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return JsonResponse(
-                {'Status': False, 'Error': 'Log in required'},
-                status=403,
-            )
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
         if getattr(request.user, 'type', None) != 'buyer':
-            return JsonResponse(
-                {'Status': False, 'Error': 'Только для покупателей'},
-                status=403,
-            )
-        return super().dispatch(request, *args, **kwargs)
+            raise PermissionDenied('Только для покупателей')
 
 
 class BuyerBaseView(BuyerPermissionMixin, APIView):
+    """Базовый класс для покупателя: токен + только type=buyer."""
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAuthenticated,)
 
 
 class RegisterAccount(APIView):
+    """POST /api/v1/user/register — создание пользователя и токен подтверждения email."""
+
     def post(self, request, *args, **kwargs):
         required_fields = {
             'first_name',
@@ -169,6 +160,8 @@ class RegisterAccount(APIView):
 
 
 class ConfirmAccount(APIView):
+    """POST /api/v1/user/confirm — активация аккаунта по email + токену."""
+
     def post(self, request, *args, **kwargs):
         if not {'email', 'token'}.issubset(request.data):
             return JsonResponse(
@@ -198,6 +191,8 @@ class ConfirmAccount(APIView):
 
 
 class LoginAccount(APIView):
+    """POST /api/v1/user/login — выдача DRF Token для заголовка Authorization."""
+
     def post(self, request, *args, **kwargs):
         if not {'email', 'password'}.issubset(request.data):
             return JsonResponse(
@@ -226,6 +221,7 @@ class LoginAccount(APIView):
 
 
 class AccountDetails(APIView):
+    """GET/POST /api/v1/user/details — профиль и смена пароля (с токеном)."""
     authentication_classes = (TokenAuthentication,)
     permission_classes = (IsAuthenticated,)
 
@@ -266,6 +262,8 @@ class AccountDetails(APIView):
 
 
 class ApiRoot(APIView):
+    """GET /api/v1/ — проверка доступности API и список основных путей."""
+
     def get(self, request, *args, **kwargs):
         return JsonResponse(
             {
@@ -295,6 +293,8 @@ class ApiRoot(APIView):
 
 
 class CategoryView(APIView):
+    """GET /api/v1/categories — все категории."""
+
     def get(self, request, *args, **kwargs):
         queryset = Category.objects.all().order_by('-name')
         serializer = CategorySerializer(queryset, many=True)
@@ -302,6 +302,8 @@ class CategoryView(APIView):
 
 
 class ShopView(APIView):
+    """GET /api/v1/shops — магазины, принимающие заказы (state=True)."""
+
     def get(self, request, *args, **kwargs):
         queryset = Shop.objects.filter(state=True).order_by('-name')
         serializer = ShopSerializer(queryset, many=True)
@@ -309,7 +311,13 @@ class ShopView(APIView):
 
 
 class ProductInfoView(APIView):
+    """
+    GET /api/v1/products — каталог (ProductInfo).
+    Query: shop_id, category_id, search (по названию товара и модели).
+    """
+
     def get(self, request, *args, **kwargs):
+        # Только товары из магазинов с включённым приёмом заказов
         query = Q(shop__state=True)
 
         shop_id = request.query_params.get('shop_id')
@@ -338,7 +346,10 @@ class ProductInfoView(APIView):
 
 
 class PartnerUpdate(PartnerBaseView):
-    """POST: загрузка прайса по URL (YAML)."""
+    """
+    POST /api/v1/partner/update — скачать YAML по url и обновить прайс магазина.
+    Перед импортом старые ProductInfo этого магазина удаляются.
+    """
 
     def post(self, request, *args, **kwargs):
         url = request.data.get('url')
@@ -428,7 +439,9 @@ class PartnerUpdate(PartnerBaseView):
 
 
 class PartnerState(PartnerBaseView):
-    """GET: статус приёма заказов; POST: изменить статус."""
+    """
+    GET/POST /api/v1/partner/state — чтение и смена флага приёма заказов магазина.
+    """
 
     def get(self, request, *args, **kwargs):
         shop = Shop.objects.filter(user=request.user).first()
@@ -494,7 +507,7 @@ class PartnerState(PartnerBaseView):
 
 
 class PartnerOrders(PartnerBaseView):
-    """GET: заказы поставщика."""
+    """GET /api/v1/partner/orders — заказы, где есть товары этого магазина."""
 
     def get(self, request, *args, **kwargs):
         orders = (
@@ -520,6 +533,11 @@ class PartnerOrders(PartnerBaseView):
 
 
 class BasketView(BuyerBaseView):
+    """
+    Корзина = Order со state='basket' (одна на пользователя).
+    POST/PUT: поле items — JSON-строка (см. ТЗ). DELETE: items — id через запятую.
+    """
+
     def get(self, request, *args, **kwargs):
         basket = (
             Order.objects.filter(
@@ -741,6 +759,11 @@ class ContactView(BuyerBaseView):
 
 
 class OrderView(BuyerBaseView):
+    """
+    GET /api/v1/order — оформленные заказы (не корзина).
+    POST — перевод корзины в заказ: id корзины, contact — id контакта доставки.
+    """
+
     def get(self, request, *args, **kwargs):
         orders = (
             Order.objects.filter(user=request.user)

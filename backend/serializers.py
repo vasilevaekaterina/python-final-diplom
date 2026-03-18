@@ -14,6 +14,8 @@ from backend.models import (
 
 
 class ContactSerializer(serializers.ModelSerializer):
+    """Адрес доставки покупателя."""
+
     class Meta:
         model = Contact
         fields = (
@@ -34,6 +36,8 @@ class ContactSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    """Профиль пользователя + вложенные контакты (только чтение)."""
+
     contacts = ContactSerializer(read_only=True, many=True)
 
     class Meta:
@@ -51,6 +55,8 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    """Категория товаров."""
+
     class Meta:
         model = Category
         fields = ('id', 'name')
@@ -58,6 +64,8 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ShopSerializer(serializers.ModelSerializer):
+    """Магазин (id, имя, принимает ли заказы)."""
+
     class Meta:
         model = Shop
         fields = ('id', 'name', 'state')
@@ -65,6 +73,8 @@ class ShopSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    """Товар: название и категория (строкой)."""
+
     category = serializers.StringRelatedField()
 
     class Meta:
@@ -73,6 +83,8 @@ class ProductSerializer(serializers.ModelSerializer):
 
 
 class ProductParameterSerializer(serializers.ModelSerializer):
+    """Параметр прайса (имя + значение)."""
+
     parameter = serializers.StringRelatedField()
 
     class Meta:
@@ -81,6 +93,8 @@ class ProductParameterSerializer(serializers.ModelSerializer):
 
 
 class ProductInfoSerializer(serializers.ModelSerializer):
+    """Позиция в прайсе магазина (цена, остаток, товар, параметры)."""
+
     product = ProductSerializer(read_only=True)
     product_parameters = ProductParameterSerializer(read_only=True, many=True)
 
@@ -100,6 +114,8 @@ class ProductInfoSerializer(serializers.ModelSerializer):
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
+    """Запись в корзине/заказе (для POST корзины)."""
+
     class Meta:
         model = OrderItem
         fields = ('id', 'product_info', 'quantity', 'order')
@@ -108,10 +124,16 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
 
 class OrderItemReadSerializer(OrderItemSerializer):
+    """Позиция заказа с вложенным ProductInfo (для ответа GET)."""
+
     product_info = ProductInfoSerializer(read_only=True)
 
 
 class OrderSerializer(serializers.ModelSerializer):
+    """
+    Заказ или корзина: позиции, сумма (annotate total_sum), контакт доставки.
+    """
+
     ordered_items = OrderItemReadSerializer(read_only=True, many=True)
     total_sum = serializers.IntegerField()
     contact = ContactSerializer(read_only=True)
