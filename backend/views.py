@@ -2,10 +2,12 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
+from django.db import IntegrityError
 from django.http import JsonResponse
 from django.db.models import F, Q, Sum
 from requests import get
 from rest_framework.authtoken.models import Token
+from ujson import loads as load_json
 from yaml import load as load_yaml, Loader
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.permissions import IsAuthenticated
@@ -17,6 +19,7 @@ from backend.models import (
     Contact,
     ConfirmEmailToken,
     Order,
+    OrderItem,
     Parameter,
     Product,
     ProductInfo,
@@ -28,6 +31,7 @@ from backend.serializers import (
     CategorySerializer,
     ContactSerializer,
     OrderSerializer,
+    OrderItemSerializer,
     ProductInfoSerializer,
     ShopSerializer,
     UserSerializer,
@@ -500,19 +504,136 @@ class PartnerOrders(PartnerBaseView):
 
 class BasketView(BuyerBaseView):
     def get(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Basket (stub)'})
+        basket = (
+            Order.objects.filter(
+                user=request.user,
+                state='basket',
+            )
+            .prefetch_related(
+                'ordered_items__product_info__product__category',
+                'ordered_items__product_info__product_parameters__parameter',
+            )
+            .annotate(
+                total_sum=Sum(
+                    F('ordered_items__quantity')
+                    * F('ordered_items__product_info__price'),
+                ),
+            )
+            .distinct()
+        )
+        serializer = OrderSerializer(basket, many=True)
+        return Response(serializer.data)
 
     def post(self, request, *args, **kwargs):
-        return JsonResponse({'Status': True, 'Message': 'Basket add (stub)'})
+        items_string = request.data.get('items')
+        if not items_string:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+
+        try:
+            items = load_json(items_string)
+        except ValueError:
+            return JsonResponse(
+                {'Status': False, 'Errors': 'Неверный формат запроса'},
+            )
+
+        basket, _ = Order.objects.get_or_create(
+            user=request.user,
+            state='basket',
+        )
+
+        objects_created = 0
+        for order_item in items:
+            order_item.update({'order': basket.id})
+            serializer = OrderItemSerializer(data=order_item)
+            if serializer.is_valid():
+                try:
+                    serializer.save()
+                except IntegrityError as exc:
+                    return JsonResponse(
+                        {'Status': False, 'Errors': str(exc)},
+                    )
+                objects_created += 1
+            else:
+                return JsonResponse(
+                    {'Status': False, 'Errors': serializer.errors},
+                )
+
+        return JsonResponse(
+            {'Status': True, 'Создано объектов': objects_created},
+        )
 
     def put(self, request, *args, **kwargs):
+        items_string = request.data.get('items')
+        if not items_string:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+
+        try:
+            items = load_json(items_string)
+        except ValueError:
+            return JsonResponse(
+                {'Status': False, 'Errors': 'Неверный формат запроса'},
+            )
+
+        basket, _ = Order.objects.get_or_create(
+            user=request.user,
+            state='basket',
+        )
+
+        objects_updated = 0
+        for item in items:
+            if isinstance(item.get('id'), int) and isinstance(
+                item.get('quantity'),
+                int,
+            ):
+                objects_updated += OrderItem.objects.filter(
+                    order=basket,
+                    id=item['id'],
+                ).update(quantity=item['quantity'])
+
         return JsonResponse(
-            {'Status': True, 'Message': 'Basket update (stub)'},
+            {'Status': True, 'Обновлено объектов': objects_updated},
         )
 
     def delete(self, request, *args, **kwargs):
+        items_string = request.data.get('items')
+        if not items_string:
+            return JsonResponse(
+                {
+                    'Status': False,
+                    'Errors': 'Не указаны все необходимые аргументы',
+                },
+            )
+
+        ids = [
+            x.strip() for x in str(items_string).split(',')
+            if x.strip().isdigit()
+        ]
+        if not ids:
+            return JsonResponse(
+                {'Status': False, 'Errors': 'Некорректный список id'},
+            )
+
+        basket, _ = Order.objects.get_or_create(
+            user=request.user,
+            state='basket',
+        )
+
+        deleted_count, _ = OrderItem.objects.filter(
+            order=basket,
+            id__in=ids,
+        ).delete()
         return JsonResponse(
-            {'Status': True, 'Message': 'Basket delete (stub)'},
+            {'Status': True, 'Удалено объектов': deleted_count},
         )
 
 
