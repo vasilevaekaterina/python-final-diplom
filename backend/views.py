@@ -55,6 +55,30 @@ class PartnerBaseView(PartnerPermissionMixin, APIView):
     permission_classes = (IsAuthenticated,)
 
 
+class BuyerPermissionMixin:
+    """
+    Доступ к эндпоинтам покупателя (корзина/контакты/заказы) только для type='buyer'.
+    """
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse(
+                {'Status': False, 'Error': 'Log in required'},
+                status=403,
+            )
+        if getattr(request.user, 'type', None) != 'buyer':
+            return JsonResponse(
+                {'Status': False, 'Error': 'Только для покупателей'},
+                status=403,
+            )
+        return super().dispatch(request, *args, **kwargs)
+
+
+class BuyerBaseView(BuyerPermissionMixin, APIView):
+    authentication_classes = (TokenAuthentication,)
+    permission_classes = (IsAuthenticated,)
+
+
 class RegisterAccount(APIView):
     def post(self, request, *args, **kwargs):
         required_fields = {
@@ -238,6 +262,9 @@ class ApiRoot(APIView):
                     'partner_update': '/api/v1/partner/update',
                     'partner_state': '/api/v1/partner/state',
                     'partner_orders': '/api/v1/partner/orders',
+                    'basket': '/api/v1/basket',
+                    'contacts': '/api/v1/user/contact',
+                    'orders': '/api/v1/order',
                 },
             },
         )
@@ -463,3 +490,39 @@ class PartnerOrders(PartnerBaseView):
         )
         serializer = OrderSerializer(orders, many=True)
         return Response(serializer.data)
+
+
+class BasketView(BuyerBaseView):
+    def get(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Basket (stub)'})
+
+    def post(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Basket add (stub)'})
+
+    def put(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Basket update (stub)'})
+
+    def delete(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Basket delete (stub)'})
+
+
+class ContactView(BuyerBaseView):
+    def get(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Contacts (stub)'})
+
+    def post(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Contact create (stub)'})
+
+    def put(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Contact update (stub)'})
+
+    def delete(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Contact delete (stub)'})
+
+
+class OrderView(BuyerBaseView):
+    def get(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Orders (stub)'})
+
+    def post(self, request, *args, **kwargs):
+        return JsonResponse({'Status': True, 'Message': 'Order create (stub)'})
